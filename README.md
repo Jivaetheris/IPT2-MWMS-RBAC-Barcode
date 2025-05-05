@@ -1,6 +1,6 @@
 # IPT2-MWMS-RBAC-Barcode
 
-installing tips:
+INSTALLING TIPS:
 npm create vite@latest
 npm i
 npm i tailwindcss @tailwindcss/vite
