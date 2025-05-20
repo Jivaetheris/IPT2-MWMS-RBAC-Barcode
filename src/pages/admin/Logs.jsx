@@ -4,37 +4,27 @@ import { supabase } from "../../createClient";
 export default function Logs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tableFilter, setTableFilter] = useState("all");
 
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [tableFilter]);
 
   const fetchLogs = async () => {
     setLoading(true);
 
     const { data, error } = await supabase
-      .from("audit_trail")
-      .select(`
-        id,
-        action,
-        entity,
-        entity_id,
-        details,
-        created_at,
-        users (
-          username,
-          email,
-          role
-        )
-      `)
-      .order("created_at", { ascending: false });
+      .from("activity_logs")
+      .select("*")
+      .order("timestamp", { ascending: false });
 
     if (error) {
-      console.error("Failed to fetch logs:", error.message);
+      console.error("Failed to fetch activity logs:", error.message);
     } else {
-      // Optional: Filter only admin actions
-      const adminLogs = data.filter(log => log.users?.role === "admin");
-      setLogs(adminLogs);
+      const filtered = tableFilter === "all"
+        ? data
+        : data.filter(log => log.table_name === tableFilter);
+      setLogs(filtered);
     }
 
     setLoading(false);
@@ -42,21 +32,40 @@ export default function Logs() {
 
   return (
     <div className="p-4">
-      <h2 className="text-2xl font-bold mb-4">Admin Audit Logs</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold">Activity Logs</h2>
+        <div className="flex items-center gap-2">
+          <select
+            className="border rounded p-1 text-sm"
+            value={tableFilter}
+            onChange={(e) => setTableFilter(e.target.value)}
+          >
+            <option value="all">All Tables</option>
+            <option value="stock_entries">Stock Entries</option>
+            <option value="stock_transfers">Stock Transfers</option>
+            <option value="products">Products</option>
+            <option value="warehouses">Warehouses</option>
+            {/* Add more options based on your table_name values */}
+          </select>
+          <button
+            onClick={fetchLogs}
+            className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
       {loading ? (
-        <p>Loading...</p>
+        <p className="text-center text-gray-500 animate-pulse">Loading logs...</p>
       ) : logs.length === 0 ? (
-        <p>No admin logs found.</p>
+        <p className="text-gray-600">No logs found.</p>
       ) : (
         <div className="overflow-auto">
           <table className="min-w-full border border-gray-300 text-sm">
             <thead className="bg-gray-200">
               <tr>
                 <th className="border p-2">Action</th>
-                <th className="border p-2">Entity</th>
-                <th className="border p-2">Entity ID</th>
-                <th className="border p-2">Details</th>
-                <th className="border p-2">Admin</th>
                 <th className="border p-2">Timestamp</th>
               </tr>
             </thead>
@@ -64,17 +73,12 @@ export default function Logs() {
               {logs.map((log) => (
                 <tr key={log.id} className="border-t">
                   <td className="p-2">{log.action}</td>
-                  <td className="p-2">{log.entity}</td>
-                  <td className="p-2">{log.entity_id || "—"}</td>
-                  <td className="p-2 whitespace-pre-wrap max-w-xs break-words">
+                  <td className="p-2">{log.table_name}</td>
+                  <td className="p-2 text-xs text-gray-700">{log.record_id || "—"}</td>
+                  <td className="p-2 max-w-xs whitespace-pre-wrap break-words">
                     <pre>{JSON.stringify(log.details, null, 2)}</pre>
                   </td>
-                  <td className="p-2">
-                    {log.users?.username || log.users?.email || "Unknown"}
-                  </td>
-                  <td className="p-2">
-                    {new Date(log.created_at).toLocaleString()}
-                  </td>
+                  <td className="p-2 text-xs text-gray-600">{new Date(log.timestamp).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>

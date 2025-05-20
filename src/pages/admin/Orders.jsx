@@ -1,6 +1,7 @@
-// Orders.jsx
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../createClient';
+import { logActivity } from '../../assets/logActivity';
+
 const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
@@ -63,67 +64,63 @@ const Orders = () => {
   };
 
   const createOrder = async () => {
-  setError(null);
-  setLoading(true);
+    setError(null);
+    setLoading(true);
 
-  try {
-    await fetchProducts(); // ✅ Refresh product list before checking stock
+    try {
+      await fetchProducts(); // Refresh product list before checking stock
 
-    // Check stock
-    for (const item of orderItems) {
-      const product = products.find(p => p.id === item.product_id);
-      if (!product) throw new Error(`Product not found: ID ${item.product_id}`);
-      if (parseInt(item.quantity) > parseInt(product.stock)) {
-        throw new Error(`Insufficient stock for ${product.name}. Available: ${product.stock}`);
+      for (const item of orderItems) {
+        const product = products.find(p => p.id === item.product_id);
+        if (!product) throw new Error(`Product not found: ID ${item.product_id}`);
+        if (parseInt(item.quantity) > parseInt(product.stock)) {
+          throw new Error(`Insufficient stock for ${product.name}. Available: ${product.stock}`);
+        }
       }
-    }
 
-    // Insert order
-    const { data: order, error: orderErr } = await supabase
-      .from('sales_orders')
-      .insert([newOrder])
-      .select()
-      .single();
-    if (orderErr) throw orderErr;
+      const { data: order, error: orderErr } = await supabase
+        .from('sales_orders')
+        .insert([newOrder])
+        .select()
+        .single();
+      if (orderErr) throw orderErr;
 
-    // Insert order items
-    const itemsToInsert = orderItems.map(item => ({
-      sales_order_id: order.id,
-      product_id: item.product_id,
-      quantity: parseInt(item.quantity),
-    }));
+      const itemsToInsert = orderItems.map(item => ({
+        sales_order_id: order.id,
+        product_id: item.product_id,
+        quantity: parseInt(item.quantity),
+      }));
 
-    const { error: itemsErr } = await supabase
-      .from('sales_order_items')
-      .insert(itemsToInsert);
-    if (itemsErr) throw itemsErr;
+      const { error: itemsErr } = await supabase
+        .from('sales_order_items')
+        .insert(itemsToInsert);
+      if (itemsErr) throw itemsErr;
 
-    // Deduct stock
-    for (const item of orderItems) {
-      const product = products.find(p => p.id === item.product_id);
-      const newStock = parseInt(product.stock) - parseInt(item.quantity); // ✅ Safe subtraction
+      for (const item of orderItems) {
+        const product = products.find(p => p.id === item.product_id);
+        const newStock = parseInt(product.stock) - parseInt(item.quantity);
 
-      const { error: stockErr } = await supabase
-        .from('products')
-        .update({ stock: newStock })
-        .eq('id', item.product_id);
+        const { error: stockErr } = await supabase
+          .from('products')
+          .update({ stock: newStock })
+          .eq('id', item.product_id);
 
-      if (stockErr) {
-        console.error('Stock update error:', stockErr); // ✅ Debug log
-        throw stockErr;
+        if (stockErr) throw stockErr;
+
+        await logActivity(`Stock deducted: ${product.name} x ${item.quantity}`);
       }
+
+      await logActivity(`Created sales order for ${newOrder.customer_name}`);
+
+      resetForm();
+      await fetchProducts();
+      await fetchOrders();
+    } catch (err) {
+      setError(err.message || 'Failed to create order');
+    } finally {
+      setLoading(false);
     }
-
-    resetForm();
-    await fetchProducts(); // ✅ Refresh stock UI
-    await fetchOrders();   // ✅ Refresh order list
-
-  } catch (err) {
-    setError(err.message || 'Failed to create order');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const resetForm = () => {
     setNewOrder({ customer_name: '', status: 'Pending' });
@@ -138,7 +135,10 @@ const Orders = () => {
       .update({ status })
       .eq('id', id);
     if (error) setError(error.message);
-    else await fetchOrders();
+    else {
+      await fetchOrders();
+      await logActivity(`Updated order status: Order #${id} set to ${status}`);
+    }
     setLoading(false);
   };
 
@@ -147,7 +147,10 @@ const Orders = () => {
     await supabase.from('sales_order_items').delete().eq('sales_order_id', id);
     const { error } = await supabase.from('sales_orders').delete().eq('id', id);
     if (error) setError(error.message);
-    else await fetchOrders();
+    else {
+      await fetchOrders();
+      await logActivity(`Deleted order #${id}`);
+    }
     setLoading(false);
   };
 
@@ -174,7 +177,7 @@ const Orders = () => {
         <option value="In Transit">In Transit</option>
         <option value="Received">Received</option>
       </select>
-      
+
       <select
         name="product_id"
         value={newItem.product_id}

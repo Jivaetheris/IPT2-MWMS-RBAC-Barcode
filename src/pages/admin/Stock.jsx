@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../createClient";
+import { logActivity } from "../../assets/logActivity"; 
 
 export default function Stock() {
   const [stocks, setStocks] = useState([]);
@@ -54,7 +55,7 @@ export default function Stock() {
 
     const { data: product } = await supabase
       .from("products")
-      .select("stock")
+      .select("stock, name")
       .eq("id", product_id)
       .single();
 
@@ -69,17 +70,21 @@ export default function Stock() {
       alert("Stock added, but failed to update product stock.");
     }
 
+    const warehouse = warehouses.find(w => w.id === warehouse_id);
+    await logActivity(`Added ${qty} ${product?.name} to ${warehouse?.name}`);
+
     setNewStock({ product_id: "", warehouse_id: "", quantity: 0 });
     loadData();
   }
 
   async function handleTransferStock(e) {
     e.preventDefault();
+    const qty = Number(transfer.quantity);
     const { data, error } = await supabase.rpc("transfer_stock", {
       in_product_id: transfer.product_id,
       from_warehouse_id: transfer.from_warehouse_id,
       to_warehouse_id: transfer.to_warehouse_id,
-      transfer_quantity: Number(transfer.quantity),
+      transfer_quantity: qty,
     });
 
     if (error) {
@@ -87,6 +92,11 @@ export default function Stock() {
       alert(`Transfer failed: ${error.message}`);
       return;
     }
+
+    const product = products.find(p => p.id === transfer.product_id);
+    const from = warehouses.find(w => w.id === transfer.from_warehouse_id);
+    const to = warehouses.find(w => w.id === transfer.to_warehouse_id);
+    await logActivity(`Transferred ${qty} ${product?.name} from ${from?.name} to ${to?.name}`);
 
     setTransfer({ product_id: "", from_warehouse_id: "", to_warehouse_id: "", quantity: 0 });
     loadData();
@@ -123,7 +133,7 @@ export default function Stock() {
           .filter((stock) => stock.quantity <= 50)
           .map((stock) => (
             <li key={stock.id} style={{ color: "red", fontWeight: "bold" }}>
-              {stock.product_name} - {stock.quantity} pcs  @ {stock.warehouse_name} 
+              {stock.product_name} - {stock.quantity} pcs @ {stock.warehouse_name}
             </li>
           ))}
       </ul>

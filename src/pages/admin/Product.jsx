@@ -1,7 +1,7 @@
-// Product.jsx
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../createClient';
 import Barcode from 'react-barcode';
+import { logActivity } from '../../assets/logActivity';
 
 const Product = () => {
   const [products, setProducts] = useState([]);
@@ -24,9 +24,7 @@ const Product = () => {
   }, []);
 
   const fetchSuppliers = async () => {
-    const { data, error } = await supabase
-      .from('suppliers')
-      .select('id, name');
+    const { data, error } = await supabase.from('suppliers').select('id, name');
     if (error) console.error('Suppliers fetch error:', error);
     else setSuppliers(data);
   };
@@ -51,7 +49,13 @@ const Product = () => {
 
   const resetForm = () => {
     setFormData({
-      name: '', sku: '', category: '', supplier_id: '', cost_price: '', selling_price: '', barcode: ''
+      name: '',
+      sku: '',
+      category: '',
+      supplier_id: '',
+      cost_price: '',
+      selling_price: '',
+      barcode: ''
     });
     setEditingId(null);
     setError(null);
@@ -68,7 +72,6 @@ const Product = () => {
       selling_price: parseFloat(formData.selling_price),
       barcode: formData.barcode || formData.sku
     };
-    console.log('Saving payload:', payload);
 
     let response;
     if (editingId) {
@@ -77,11 +80,19 @@ const Product = () => {
         .update(payload)
         .eq('id', editingId)
         .select();
+
+      if (!response.error) {
+        await logActivity('Update Product', `Updated product: ${payload.name}`);
+      }
     } else {
       response = await supabase
         .from('products')
         .insert([payload])
         .single();
+
+      if (!response.error) {
+        await logActivity('Create Product', `Created product: ${payload.name}`);
+      }
     }
 
     if (response.error) {
@@ -108,14 +119,13 @@ const Product = () => {
   };
 
   const deleteProduct = async id => {
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', id);
+    const productToDelete = products.find(p => p.id === id);
+    const { error } = await supabase.from('products').delete().eq('id', id);
     if (error) {
       console.error('Delete error:', error);
       setError(error.message);
     } else {
+      await logActivity('Delete Product', `Deleted product: ${productToDelete?.name || id}`);
       fetchProducts();
     }
   };
@@ -152,18 +162,24 @@ const Product = () => {
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          {['cost_price ₱', 'selling_price ₱'].map(field => (
-            <input
-              key={field}
-              type="number"
-              name={field}
-              placeholder={field.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-              value={formData[field]}
-              onChange={handleChange}
-              className="border p-2"
-              step="0.01"
-            />
-          ))}
+          <input
+            type="number"
+            name="cost_price"
+            placeholder="Cost Price ₱"
+            value={formData.cost_price}
+            onChange={handleChange}
+            className="border p-2"
+            step="0.01"
+          />
+          <input
+            type="number"
+            name="selling_price"
+            placeholder="Selling Price ₱"
+            value={formData.selling_price}
+            onChange={handleChange}
+            className="border p-2"
+            step="0.01"
+          />
           <input
             type="text"
             name="barcode"
@@ -221,10 +237,16 @@ const Product = () => {
                   />
                 </td>
                 <td className="p-2">
-                  <button onClick={() => editProduct(product)} className="px-3 py-1 bg-yellow-500 text-white rounded mr-2">
+                  <button
+                    onClick={() => editProduct(product)}
+                    className="px-3 py-1 bg-yellow-500 text-white rounded mr-2"
+                  >
                     Edit
                   </button>
-                  <button onClick={() => deleteProduct(product.id)} className="px-3 py-1 bg-red-500 text-white rounded">
+                  <button
+                    onClick={() => deleteProduct(product.id)}
+                    className="px-3 py-1 bg-red-500 text-white rounded"
+                  >
                     Delete
                   </button>
                 </td>

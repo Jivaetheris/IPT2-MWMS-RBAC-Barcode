@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../createClient';
+import { logActivity } from '../../assets/logActivity';
 
 const Warehouse = () => {
   const [warehouses, setWarehouses] = useState([]);
@@ -32,11 +33,20 @@ const Warehouse = () => {
         .update(formData)
         .eq('id', editingId);
 
-      if (error) console.error('Update error:', error);
-      else setEditingId(null);
+      if (error) {
+        console.error('Update error:', error);
+      } else {
+        await logActivity('UPDATE', `Updated warehouse "${formData.name}" (ID: ${editingId})`);
+        setEditingId(null);
+      }
     } else {
-      const { error } = await supabase.from('warehouses').insert([formData]);
-      if (error) console.error('Insert error:', error);
+      const { data, error } = await supabase.from('warehouses').insert([formData]).select();
+
+      if (error) {
+        console.error('Insert error:', error);
+      } else if (data && data.length > 0) {
+        await logActivity('CREATE', `Added warehouse "${formData.name}" (ID: ${data[0].id})`);
+      }
     }
 
     setFormData({ name: '', location: '', capacity: '' });
@@ -44,9 +54,15 @@ const Warehouse = () => {
   }
 
   async function deleteWarehouse(id) {
+    const warehouse = warehouses.find(w => w.id === id);
+
     const { error } = await supabase.from('warehouses').delete().eq('id', id);
-    if (error) console.error('Delete error:', error);
-    else fetchWarehouses();
+    if (error) {
+      console.error('Delete error:', error);
+    } else {
+      await logActivity('DELETE', `Deleted warehouse "${warehouse?.name}" (ID: ${id})`);
+      fetchWarehouses();
+    }
   }
 
   function editWarehouse(warehouse) {
@@ -59,23 +75,21 @@ const Warehouse = () => {
   }
 
   return (
-    <div >
+    <div>
       <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>Warehouse Management</h2>
 
-      <div >
+      <div>
         <input
           name="name"
           placeholder="Warehouse Name"
           value={formData.name}
           onChange={handleChange}
-          
         />
         <input
           name="location"
           placeholder="Location"
           value={formData.location}
           onChange={handleChange}
-          
         />
         <input
           name="capacity"
@@ -83,12 +97,8 @@ const Warehouse = () => {
           type="number"
           value={formData.capacity}
           onChange={handleChange}
-          
         />
-        <button
-          onClick={handleSubmit}
-         
-        >
+        <button onClick={handleSubmit}>
           {editingId ? 'Update Warehouse' : 'Add Warehouse'}
         </button>
       </div>
@@ -96,19 +106,19 @@ const Warehouse = () => {
       <table border={1}>
         <thead>
           <tr>
-            <th >Name</th>
+            <th>Name</th>
             <th>Location</th>
-            <th >Capacity</th>
-            <th >Actions</th>
+            <th>Capacity</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {warehouses.map(wh => (
             <tr key={wh.id}>
-              <td >{wh.name}</td>
-              <td >{wh.location}</td>
-              <td >{wh.capacity}</td>
-              <td >
+              <td>{wh.name}</td>
+              <td>{wh.location}</td>
+              <td>{wh.capacity}</td>
+              <td>
                 <button onClick={() => editWarehouse(wh)} style={{ marginRight: '0.5rem' }}>Update</button>
                 <button onClick={() => deleteWarehouse(wh.id)} style={{ color: 'red' }}>Delete</button>
               </td>
