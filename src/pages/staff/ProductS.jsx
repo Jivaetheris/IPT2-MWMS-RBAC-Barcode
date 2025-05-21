@@ -43,39 +43,65 @@ const ProductS = () => {
       setProducts(data);
     }
   };
-  
-  return (
-    <div className="p-6">
-      
 
+  return (
+    <div
+      style={{
+        maxHeight: "75vh",
+        overflowY: "auto",
+        padding: "20px",
+        backgroundColor: "#fff",
+        borderRadius: "12px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+        border: "1px solid #ddd",
+        minWidth: "200px",
+      }}
+    >
       <section>
-        <h2 className="text-xl font-semibold mb-2">All Products</h2>
-        <table className="table-auto w-full border" border={1}>
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="p-2">ID</th>
-              <th className="p-2">Name</th>
-              <th className="p-2">SKU</th>
-              <th className="p-2">Category</th>
-              <th className="p-2">Supplier</th>
-              <th className="p-2">Cost</th>
-              <th className="p-2">Price</th>
-              <th className="p-2">Barcode</th>
-              <th className="p-2">Scan</th>
+        <h2 style={{
+          padding: '12px',
+          fontSize: '24px',
+          fontWeight: 'bold',
+          marginBottom: '20px'
+        }}>All Products</h2>
+
+        <table style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          fontFamily: 'Arial, sans-serif',
+          minWidth: '900px'
+        }}>
+          <thead style={{ backgroundColor: '#2E8B57', color: 'white' }}>
+            <tr>
+              <th style={{ padding: '14px', textAlign: 'left', width: '95px' }}>ID</th>
+              <th style={{ padding: '14px', textAlign: 'left' }}>Name</th>
+              <th style={{ padding: '14px', textAlign: 'left' }}>SKU</th>
+              <th style={{ padding: '14px', textAlign: 'left' }}>Category</th>
+              <th style={{ padding: '14px', textAlign: 'left' }}>Supplier</th>
+              <th style={{ padding: '14px', textAlign: 'left' }}>Cost</th>
+              <th style={{ padding: '14px', textAlign: 'left' }}>Price</th>
+              <th style={{ padding: '14px', textAlign: 'left' }}>Barcode</th>
+              <th style={{ padding: '14px', textAlign: 'left' }}>Scan</th>
             </tr>
           </thead>
           <tbody>
-            {products.map(product => (
-              <tr key={product.id} className="border-t">
-                <td className="p-2">{product.id}</td>
-                <td className="p-2">{product.name}</td>
-                <td className="p-2">{product.sku}</td>
-                <td className="p-2">{product.category}</td>
-                <td className="p-2">{product.suppliers?.name}</td>
-                <td className="p-2">₱{product.cost_price}</td>
-                <td className="p-2">₱{product.selling_price}</td>
-                <td className="p-2">{product.barcode}</td>
-                <td className="p-2">
+            {products.map((product, index) => (
+              <tr
+                key={product.id}
+                style={{
+                  backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9f9f9',
+                  borderBottom: '1px solid #ddd'
+                }}
+              >
+                <td style={{ padding: '12px' }}>{product.id}</td>
+                <td style={{ padding: '12px' }}>{product.name}</td>
+                <td style={{ padding: '12px' }}>{product.sku}</td>
+                <td style={{ padding: '12px' }}>{product.category}</td>
+                <td style={{ padding: '12px' }}>{product.suppliers?.name}</td>
+                <td style={{ padding: '12px' }}>₱{product.cost_price}</td>
+                <td style={{ padding: '12px' }}>₱{product.selling_price}</td>
+                <td style={{ padding: '12px' }}>{product.barcode}</td>
+                <td style={{ padding: '12px' }}>
                   <Barcode
                     value={product.barcode || product.sku}
                     format="CODE128"
@@ -84,7 +110,6 @@ const ProductS = () => {
                     displayValue={false}
                   />
                 </td>
-
               </tr>
             ))}
           </tbody>

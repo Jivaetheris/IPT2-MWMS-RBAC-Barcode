@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../createClient';
-import { logActivity } from '../../assets/logActivity';
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
@@ -19,10 +18,9 @@ const Orders = () => {
   const fetchProducts = async () => {
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, stock')
+      .select('id, name')
       .order('name', { ascending: true });
-
-    if (error) console.error('Fetch products error:', error);
+    if (error) console.error('Products fetch error:', error);
     else setProducts(data);
   };
 
@@ -41,7 +39,6 @@ const Orders = () => {
         )
       `)
       .order('order_date', { ascending: false });
-
     if (error) setError(error.message);
     else setOrders(data);
   };
@@ -58,7 +55,7 @@ const Orders = () => {
 
   const addItem = () => {
     if (newItem.product_id && newItem.quantity) {
-      setOrderItems(prev => [...prev, { ...newItem }]);
+      setOrderItems(prev => [...prev, newItem]);
       setNewItem({ product_id: '', quantity: '' });
     }
   };
@@ -68,52 +65,29 @@ const Orders = () => {
     setLoading(true);
 
     try {
-      await fetchProducts(); // Refresh product list before checking stock
-
-      for (const item of orderItems) {
-        const product = products.find(p => p.id === item.product_id);
-        if (!product) throw new Error(`Product not found: ID ${item.product_id}`);
-        if (parseInt(item.quantity) > parseInt(product.stock)) {
-          throw new Error(`Insufficient stock for ${product.name}. Available: ${product.stock}`);
-        }
-      }
-
       const { data: order, error: orderErr } = await supabase
         .from('sales_orders')
         .insert([newOrder])
         .select()
         .single();
+
       if (orderErr) throw orderErr;
 
-      const itemsToInsert = orderItems.map(item => ({
-        sales_order_id: order.id,
-        product_id: item.product_id,
-        quantity: parseInt(item.quantity),
-      }));
+      if (orderItems.length) {
+        const itemsToInsert = orderItems.map(item => ({
+          sales_order_id: order.id,
+          product_id: item.product_id,
+          quantity: item.quantity,
+        }));
 
-      const { error: itemsErr } = await supabase
-        .from('sales_order_items')
-        .insert(itemsToInsert);
-      if (itemsErr) throw itemsErr;
+        const { error: itemsErr } = await supabase
+          .from('sales_order_items')
+          .insert(itemsToInsert);
 
-      for (const item of orderItems) {
-        const product = products.find(p => p.id === item.product_id);
-        const newStock = parseInt(product.stock) - parseInt(item.quantity);
-
-        const { error: stockErr } = await supabase
-          .from('products')
-          .update({ stock: newStock })
-          .eq('id', item.product_id);
-
-        if (stockErr) throw stockErr;
-
-        await logActivity(`Stock deducted: ${product.name} x ${item.quantity}`);
+        if (itemsErr) throw itemsErr;
       }
 
-      await logActivity(`Created sales order for ${newOrder.customer_name}`);
-
       resetForm();
-      await fetchProducts();
       await fetchOrders();
     } catch (err) {
       setError(err.message || 'Failed to create order');
@@ -133,12 +107,10 @@ const Orders = () => {
     const { error } = await supabase
       .from('sales_orders')
       .update({ status })
-      .eq('id', id);
+      .eq('id', id)
+      .single();
     if (error) setError(error.message);
-    else {
-      await fetchOrders();
-      await logActivity(`Updated order status: Order #${id} set to ${status}`);
-    }
+    else await fetchOrders();
     setLoading(false);
   };
 
@@ -147,127 +119,184 @@ const Orders = () => {
     await supabase.from('sales_order_items').delete().eq('sales_order_id', id);
     const { error } = await supabase.from('sales_orders').delete().eq('id', id);
     if (error) setError(error.message);
-    else {
-      await fetchOrders();
-      await logActivity(`Deleted order #${id}`);
-    }
+    else await fetchOrders();
     setLoading(false);
   };
 
   return (
-    <div>
-      <h1>Orders</h1>
-      {error && <p style={{ color: 'red' }}>Error: {error}</p>}
+    <div
+      style={{
+        maxHeight: "75vh",
+        overflowY: "auto",
+        padding: "20px",
+        backgroundColor: "#fff",
+        borderRadius: "12px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+        border: "1px solid #ddd",
+        minWidth: "200px",
+      }}
+    >
+      <h1 style={{ padding: '12px', fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>Order Management</h1>
+      {error && <p style={{ color: 'red', marginBottom: '10px' }}>Error: {error}</p>}
 
-      <h2>Create Order</h2>
-      <input
-        name="customer_name"
-        placeholder="Customer name"
-        value={newOrder.customer_name}
-        onChange={handleOrderChange}
-        disabled={loading}
-      />
-      <select
-        name="status"
-        value={newOrder.status}
-        onChange={handleOrderChange}
-        disabled={loading}
-      >
-        <option value="Pending">Pending</option>
-        <option value="In Transit">In Transit</option>
-        <option value="Received">Received</option>
-      </select>
+      {/* New Order Form */}
+      <section className="mb-6">
+        <h2 style={{ padding: '12px', fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>Create New Order</h2>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+          <input
+            type="text"
+            name="customer_name"
+            placeholder="Customer Name"
+            style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc', minWidth: '180px' }}
+            value={newOrder.customer_name}
+            onChange={handleOrderChange}
+            disabled={loading}
+          />
+          <select
+            name="status"
+            style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc', minWidth: '180px' }}
+            value={newOrder.status}
+            onChange={handleOrderChange}
+            disabled={loading}
+          >
+            <option value="Pending">Pending</option>
+            <option value="In Transit">In Transit</option>
+            <option value="Received">Received</option>
+          </select>
+          <select
+            name="product_id"
+            style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc', minWidth: '180px' }}
+            value={newItem.product_id}
+            onChange={handleItemChange}
+            disabled={loading}
+          >
+            <option value="">Select product...</option>
+            {products.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <input
+            type="number"
+            name="quantity"
+            placeholder="Quantity"
+            style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc', width: '120px' }}
+            value={newItem.quantity}
+            onChange={handleItemChange}
+            disabled={loading}
+          />
+          <button
+            onClick={addItem}
+            disabled={loading || !newItem.product_id || !newItem.quantity}
+            style={{
+              padding: '10px 20px',
+              background: '#3CB371',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 'bold'
+            }}
+          >
+            +  Add Item
+          </button>
+        </div>
 
-      <select
-        name="product_id"
-        value={newItem.product_id}
-        onChange={handleItemChange}
-        disabled={loading}
-      >
-        <option value="">Select product</option>
-        {products.map(p => (
-          <option key={p.id} value={p.id}>
-            {p.name} (Stock: {p.stock})
-          </option>
-        ))}
-      </select>
-      <input
-        type="number"
-        name="quantity"
-        placeholder="Quantity"
-        value={newItem.quantity}
-        onChange={handleItemChange}
-        disabled={loading}
-      />
-      <button onClick={addItem} disabled={loading}>
-        Add Item
-      </button>
+        {orderItems.length > 0 && (
+          <ul className="mb-4">
+            {orderItems.map((item, i) => {
+              const prod = products.find(p => p.id === item.product_id);
+              return <li key={i}>{`${prod?.name || item.product_id} x ${item.quantity}`}</li>;
+            })}
+          </ul>
+        )}
 
-      <ul>
-        {orderItems.map((item, idx) => {
-          const product = products.find(p => p.id === item.product_id);
-          return (
-            <li key={idx}>
-              {product?.name || item.product_id} x {item.quantity}
-            </li>
-          );
-        })}
-      </ul>
+        <button
+          onClick={createOrder}
+          disabled={loading || !orderItems.length}
+          style={{
+            padding: '10px 20px',
+            background: '#3CB371',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            fontWeight: 'bold'
+          }}
+        >
+          {loading ? 'Processing...' : 'Create Order'}
+        </button>
+      </section>
 
-      <button onClick={createOrder} disabled={loading || !orderItems.length}>
-        {loading ? 'Processing...' : 'Create Order'}
-      </button>
-
-      <h2>Orders</h2>
-      <table border="1" cellPadding="8">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Customer</th>
-            <th>Status</th>
-            <th>Date</th>
-            <th>Items</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map(order => (
-            <tr key={order.id}>
-              <td>{order.id}</td>
-              <td>{order.customer_name}</td>
-              <td>
-                <select
-                  value={order.status}
-                  onChange={e => updateOrderStatus(order.id, e.target.value)}
-                  disabled={loading}
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="In Transit">In Transit</option>
-                  <option value="Received">Received</option>
-                </select>
-              </td>
-              <td>{new Date(order.order_date).toLocaleDateString()}</td>
-              <td>
-                <ul>
-                  {order.sales_order_items.map(item => {
-                    const prod = products.find(p => p.id === item.product_id);
-                    return (
-                      <li key={item.id}>
-                        {prod?.name || item.product_id} x {item.quantity}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </td>
-              <td>
-                <button onClick={() => deleteOrder(order.id)} disabled={loading}>
-                  Delete
-                </button>
-              </td>
+      {/* Orders Table */}
+      <section style={{ marginBottom: '40px' }}>
+        <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>All Orders</h2>
+        <table width="100%" style={{ borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' }}>
+          <thead style={{ backgroundColor: '#2E8B57', color: 'white' }}>
+            <tr>
+              <th style={{ padding: '12px', textAlign: 'left' }}>ID</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Customer</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Date</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Status</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Items</th>
+              <th style={{ padding: '12px', textAlign: 'center' }}>Action</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {orders.map((order, index) => (
+              <tr
+                key={order.id}
+                style={{
+                  backgroundColor: index % 2 === 0 ? '#ffffff' : '#f9f9f9',
+                  borderBottom: '1px solid #eee'
+                }}
+              >
+                <td style={{ padding: '12px' }}>{order.id}</td>
+                <td style={{ padding: '12px' }}>{order.customer_name}</td>
+                <td style={{ padding: '12px' }}>{new Date(order.order_date).toLocaleDateString()}</td>
+                <td style={{ padding: '12px' }}>
+                  <select
+                    style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ccc', minWidth: '140px' }}
+                    value={order.status}
+                    onChange={e => updateOrderStatus(order.id, e.target.value)}
+                    disabled={loading}
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="In Transit">In Transit</option>
+                    <option value="Received">Received</option>
+                    <option value="Backordered">Backordered</option>
+                  </select>
+                </td>
+                <td style={{ padding: '12px' }}>
+                  <ul style={{ listStyle: 'none', padding: '0', margin: '0' }}>
+                    {order.sales_order_items.map(item => {
+                      const prod = products.find(p => p.id === item.product_id);
+                      return (
+                        <li key={item.id} style={{ marginBottom: '4px' }}>
+                          {`${prod?.name || item.product_id} x ${item.quantity}`}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </td>
+                <td style={{ padding: '12px', textAlign: 'center' }}>
+                  <button
+                    onClick={() => deleteOrder(order.id)}
+                    style={{
+                      padding: '6px 14px',
+                      background: '#FF5C5C',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer'
+                    }}
+                    disabled={loading}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
     </div>
   );
 };

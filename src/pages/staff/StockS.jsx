@@ -1,145 +1,150 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../createClient";
 
-export default function Stock() {
+export default function StockM() {
   const [stocks, setStocks] = useState([]);
   const [products, setProducts] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [selectedWarehouse, setSelectedWarehouse] = useState("");
-  const [movementHistory, setMovementHistory] = useState([]);
+
+
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadData();
-    fetchStockMovement();
   }, []);
 
   async function loadData() {
-    const { data: stockData } = await supabase.rpc("get_stocks_with_names");
-    const { data: productData } = await supabase.from("products").select("*");
-    const { data: warehouseData } = await supabase.from("warehouses").select("*");
+    try {
+      setLoading(true);
+      const [{ data: stockData }, { data: productData }, { data: warehouseData }] = await Promise.all([
+        supabase.rpc("get_stocks_with_names"),
+        supabase.from("products").select("*"),
+        supabase.from("warehouses").select("*"),
+      ]);
 
-    setStocks(stockData || []);
-    setProducts(productData || []);
-    setWarehouses(warehouseData || []);
-  }
-
-  async function fetchStockMovement() {
-    const { data, error } = await supabase
-      .from("stock_entries")
-      .select(`
-        id,
-        product_id,
-        warehouse_id,
-        quantity,
-        date_received,
-        products ( name ),
-        warehouses ( name )
-      `)
-      .order("date_received", { ascending: false });
-
-    if (!error) {
-      setMovementHistory(data);
+      setStocks(stockData || []);
+      setProducts(productData || []);
+      setWarehouses(warehouseData || []);
+    } catch (err) {
+      console.error("Failed to load data:", err);
+    } finally {
+      setLoading(false);
     }
   }
+
+  async function loadStocksOnly() {
+    try {
+      const { data } = await supabase.rpc("get_stocks_with_names");
+      setStocks(data || []);
+    } catch (err) {
+      console.error("Failed to load stocks:", err);
+    }
+  }
+
 
   const filteredStocks = selectedWarehouse
     ? stocks.filter((s) => s.warehouse_id.toString() === selectedWarehouse)
     : stocks;
 
-  const lowStock = filteredStocks.filter((s) => s.quantity <= 50);
-  const normalStock = filteredStocks.filter((s) => s.quantity > 50);
+  const lowStockItems = filteredStocks.filter((s) => s.quantity < 50);
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>Stock Management</h2>
+    <div
+      style={{
+        maxHeight: "75vh",
+        overflowY: "auto",
+        padding: "20px",
+        backgroundColor: "#fff",
+        borderRadius: "12px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+        border: "1px solid #ddd",
+        minWidth: "200px",
+      }}
+    >
+      <h2 style={{ padding: "12px", fontSize: "24px", fontWeight: "bold", marginBottom: "20px" }}>
+        Stock Management
+      </h2>
 
-      {/* Filter */}
-      <label>
-        Filter by Warehouse:
-        <select
-          onChange={(e) => setSelectedWarehouse(e.target.value)}
-          value={selectedWarehouse}
-        >
-          <option value="">All</option>
-          {warehouses.map((wh) => (
-            <option key={wh.id} value={wh.id}>
-              {wh.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div style={{ marginBottom: "20px" }}>
+        <label>
+          Filter by Warehouse:{" "}
+          <select
+            onChange={(e) => setSelectedWarehouse(e.target.value)}
+            value={selectedWarehouse}
+            style={{ padding: "10px", borderRadius: "6px", border: "1px solid #ccc", minWidth: "180px" }}
+          >
+            <option value="">All</option>
+            {warehouses.map((wh) => (
+              <option key={wh.id} value={wh.id}>
+                {wh.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {/* Low Stock Alert */}
-      <h3 style={{ marginTop: "30px" }}>🚨 Low Stock Alerts</h3>
-      {lowStock.length === 0 ? (
-        <p>No low stock items.</p>
-      ) : (
-        <ul>
-          {lowStock.map((stock) => (
-            <li key={stock.id} style={{ color: "red", marginBottom: "8px" }}>
-              {stock.product_name} - {stock.quantity} pcs in {stock.warehouse_name}
-              <strong> (Low Stock)</strong>
-            </li>
-          ))}
-        </ul>
+      {lowStockItems.length > 0 && (
+        <div
+          style={{
+            marginBottom: "20px",
+            border: "1px solid #ffeeba",
+            padding: "10px",
+            borderRadius: "6px",
+            color: "#856404",
+          }}
+        >
+          <strong style={{color: "red"}}>Low Stock Alert:</strong>
+          <ul style={{ margin: 0, paddingLeft: "20px" }}>
+            {lowStockItems.map((item) => (
+              <li key={item.id}>
+                {item.product_name} in {item.warehouse_name} - Only {item.quantity} left
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
-      {/* Normal Stock */}
-      <h3 style={{ marginTop: "30px" }}>📦 Current Stock</h3>
-      {normalStock.length === 0 ? (
-        <p>No stock available.</p>
+      {loading ? (
+        <p>Loading data...</p>
       ) : (
-        <ul>
-          {normalStock.map((stock) => (
-            <li key={stock.id} style={{ marginBottom: "8px" }}>
-              {stock.product_name} - {stock.quantity} pcs in {stock.warehouse_name}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* Stock Movement History */}
-      <h3 style={{ marginTop: "40px" }}>📊 Stock Movement History</h3>
-      {movementHistory.length === 0 ? (
-        <p>No stock movement records found.</p>
-      ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
+        <table width="100%" style={{ borderCollapse: "collapse", fontFamily: "Arial, sans-serif" }}>
+          <thead style={{ backgroundColor: "#2E8B57", color: "white" }}>
             <tr>
-              <th style={thStyle}>Entry ID</th>
-              <th style={thStyle}>Product Name</th>
-              <th style={thStyle}>Warehouse Name</th>
-              <th style={thStyle}>Quantity</th>
-              <th style={thStyle}>Date Received</th>
+              <th style={{ padding: "12px", textAlign: "left" }}>Product</th>
+              <th style={{ padding: "12px", textAlign: "left" }}>Warehouse</th>
+              <th style={{ padding: "12px", textAlign: "left" }}>Quantity</th>
+              <th style={{ padding: "12px", textAlign: "left" }}>Status</th>
             </tr>
           </thead>
           <tbody>
-            {movementHistory.map((entry) => (
-              <tr key={entry.id}>
-                <td style={tdStyle}>{entry.id}</td>
-                <td style={tdStyle}>{entry.products?.name || "N/A"}</td>
-                <td style={tdStyle}>{entry.warehouses?.name || "N/A"}</td>
-                <td style={tdStyle}>{entry.quantity}</td>
-                <td style={tdStyle}>
-                  {new Date(entry.date_received).toLocaleDateString()}
+            {filteredStocks.map((stock, index) => (
+              <tr
+                key={stock.id}
+                style={{
+                  borderBottom: "1px solid #ddd",
+                  backgroundColor: index % 2 === 0 ? "#ffffff" : "#f9f9f9",
+                }}
+              >
+                <td style={{ padding: "10px" }}>{stock.product_name}</td>
+                <td style={{ padding: "10px" }}>{stock.warehouse_name}</td>
+                <td style={{ padding: "10px" }}>{stock.quantity}</td>
+                <td style={{ padding: "10px" }}>
+                  {stock.quantity === 0 ? (
+                    <span style={{ color: "red", fontWeight: "bold" }}>Out of Stock</span>
+                  ) : stock.quantity < 50 ? (
+                      <span style={{ color: "orange", fontWeight: "bold" }}>Low</span>
+                  ) : (
+                    <span style={{ color: "#2e7d32", fontWeight: "bold" }}>Good</span>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+
     </div>
   );
 }
-
-const thStyle = {
-  border: "1px solid #ccc",
-  padding: "8px",
-  backgroundColor: "#f0f0f0",
-  textAlign: "left",
-};
-
-const tdStyle = {
-  border: "1px solid #ccc",
-  padding: "8px",
-};
